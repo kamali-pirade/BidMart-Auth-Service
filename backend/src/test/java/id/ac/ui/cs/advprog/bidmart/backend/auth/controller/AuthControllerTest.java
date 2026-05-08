@@ -124,7 +124,7 @@ class AuthControllerTest {
         VerifyEmailRequestDTO verifyEmail = new VerifyEmailRequestDTO();
         verifyEmail.token = "token";
         ResponseEntity<Map<String, String>> verifyRes = authController.verifyEmail(verifyEmail);
-        assertEquals("Email verified", verifyRes.getBody().get("message"));
+        assertEquals("Email berhasil diverifikasi.", verifyRes.getBody().get("message"));
 
         LoginRequestDTO login = new LoginRequestDTO();
         login.email = "test@example.com";
@@ -157,11 +157,11 @@ class AuthControllerTest {
 
         TwoFactorConfirmRequestDTO confirm = new TwoFactorConfirmRequestDTO();
         confirm.code = "123456";
-        assertEquals("2FA enabled", authController.confirmTwoFactor(confirm, authentication).getBody().get("message"));
+        assertEquals("Autentikasi dua faktor berhasil diaktifkan.", authController.confirmTwoFactor(confirm, authentication).getBody().get("message"));
 
         TwoFactorDisableRequestDTO disable = new TwoFactorDisableRequestDTO();
         disable.password = "password";
-        assertEquals("2FA disabled", authController.disableTwoFactor(disable, authentication).getBody().get("message"));
+        assertEquals("Autentikasi dua faktor berhasil dinonaktifkan.", authController.disableTwoFactor(disable, authentication).getBody().get("message"));
     }
 
     @Test
@@ -184,24 +184,40 @@ class AuthControllerTest {
     }
 
     @Test
+    void forgotPasswordAndResetPasswordReturnMessages() {
+        ResponseEntity<Map<String, String>> forgot = authController.forgotPassword(Map.of("email", "test@example.com"));
+        assertEquals(200, forgot.getStatusCode().value());
+        assertEquals("Tautan reset kata sandi telah dikirim jika email terdaftar.", forgot.getBody().get("message"));
+        verify(authService).forgotPassword("test@example.com");
+
+        ResponseEntity<Map<String, String>> reset = authController.resetPassword(Map.of(
+                "token", "token",
+                "newPassword", "new-password"
+        ));
+        assertEquals(200, reset.getStatusCode().value());
+        assertEquals("Kata sandi berhasil diperbarui.", reset.getBody().get("message"));
+        verify(authService).resetPassword("token", "new-password");
+    }
+
+    @Test
     void currentUserRejectsMissingAuthenticationOrEmail() {
         TwoFactorSetupRequestDTO setup = new TwoFactorSetupRequestDTO();
         setup.method = "TOTP";
-        assertEquals("Unauthorized", org.junit.jupiter.api.Assertions.assertThrows(
+        assertEquals("Tidak terautentikasi.", org.junit.jupiter.api.Assertions.assertThrows(
                 IllegalArgumentException.class,
                 () -> authController.setupTwoFactor(setup, null)
         ).getMessage());
 
         Authentication noPrincipal = mock(Authentication.class);
         when(noPrincipal.getPrincipal()).thenReturn(null);
-        assertEquals("Unauthorized", org.junit.jupiter.api.Assertions.assertThrows(
+        assertEquals("Tidak terautentikasi.", org.junit.jupiter.api.Assertions.assertThrows(
                 IllegalArgumentException.class,
                 () -> authController.setupTwoFactor(setup, noPrincipal)
         ).getMessage());
 
         Authentication noEmail = mock(Authentication.class);
         when(noEmail.getPrincipal()).thenReturn(Map.of("userId", "1"));
-        assertEquals("Unauthorized", org.junit.jupiter.api.Assertions.assertThrows(
+        assertEquals("Tidak terautentikasi.", org.junit.jupiter.api.Assertions.assertThrows(
                 IllegalArgumentException.class,
                 () -> authController.setupTwoFactor(setup, noEmail)
         ).getMessage());

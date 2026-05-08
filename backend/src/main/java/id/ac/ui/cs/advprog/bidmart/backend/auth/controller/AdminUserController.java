@@ -1,8 +1,8 @@
 package id.ac.ui.cs.advprog.bidmart.backend.auth.controller;
 
+import id.ac.ui.cs.advprog.bidmart.backend.auth.dto.AdminUserResponseDTO;
 import id.ac.ui.cs.advprog.bidmart.backend.auth.dto.UpdateUserRolesRequestDTO;
 import id.ac.ui.cs.advprog.bidmart.backend.auth.dto.UpdateUserStatusRequestDTO;
-import id.ac.ui.cs.advprog.bidmart.backend.auth.dto.UserResponseDTO;
 import id.ac.ui.cs.advprog.bidmart.backend.auth.service.AuthService;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
@@ -28,28 +28,33 @@ public class AdminUserController {
     }
 
     @GetMapping
-    public ResponseEntity<List<UserResponseDTO>> listUsers(@RequestParam(defaultValue = "0") int page,
-                                                           @RequestParam(defaultValue = "20") int size,
-                                                           @RequestParam(required = false) String search,
-                                                           @RequestParam(required = false) String role,
-                                                           @RequestParam(required = false) String status) {
-        return ResponseEntity.ok(authService.adminListUsers(search, role, status, page, size));
+    public ResponseEntity<List<AdminUserResponseDTO>> listUsers(@RequestParam(defaultValue = "0") int page,
+                                                                @RequestParam(defaultValue = "20") int size,
+                                                                @RequestParam(required = false) String search,
+                                                                @RequestParam(required = false) String role,
+                                                                @RequestParam(required = false) String status) {
+        return ResponseEntity.ok(authService.adminListUserEntities(search, role, status, page, size)
+                .stream()
+                .map(AdminUserResponseDTO::from)
+                .toList());
     }
 
     @GetMapping("/{userId}")
-    public ResponseEntity<UserResponseDTO> getUser(@PathVariable UUID userId) {
-        return ResponseEntity.ok(authService.adminGetUser(userId));
+    public ResponseEntity<AdminUserResponseDTO> getUser(@PathVariable UUID userId) {
+        return ResponseEntity.ok(AdminUserResponseDTO.from(authService.getUserById(userId)));
     }
 
     @PutMapping("/{userId}/status")
-    public ResponseEntity<UserResponseDTO> updateStatus(@PathVariable UUID userId,
-                                                        @Valid @RequestBody UpdateUserStatusRequestDTO req) {
-        return ResponseEntity.ok(authService.adminUpdateUserStatus(userId, req.status, req.reason));
+    public ResponseEntity<AdminUserResponseDTO> updateStatus(@PathVariable UUID userId,
+                                                             @Valid @RequestBody UpdateUserStatusRequestDTO req) {
+        authService.adminUpdateUserStatus(userId, req.status, req.reason);
+        return ResponseEntity.ok(AdminUserResponseDTO.from(authService.getUserById(userId)));
     }
 
     @PutMapping("/{userId}/roles")
-    public ResponseEntity<UserResponseDTO> updateRoles(@PathVariable UUID userId,
-                                                       @Valid @RequestBody UpdateUserRolesRequestDTO req) {
-        return ResponseEntity.ok(authService.adminUpdateUserRoles(userId, req.roles));
+    public ResponseEntity<AdminUserResponseDTO> updateRoles(@PathVariable UUID userId,
+                                                            @Valid @RequestBody UpdateUserRolesRequestDTO req) {
+        authService.adminUpdateUserRoles(userId, req.roles);
+        return ResponseEntity.ok(AdminUserResponseDTO.from(authService.getUserById(userId)));
     }
 }

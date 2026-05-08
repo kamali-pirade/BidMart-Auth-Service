@@ -1,6 +1,9 @@
 package id.ac.ui.cs.advprog.bidmart.backend.auth.dto;
 
+import id.ac.ui.cs.advprog.bidmart.backend.auth.entity.User;
+import id.ac.ui.cs.advprog.bidmart.backend.auth.entity.UserStatus;
 import org.junit.jupiter.api.Test;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.Instant;
 import java.util.List;
@@ -64,5 +67,33 @@ class AuthDtoCoverageTest {
         assertEquals("secret", setup.secret);
         assertEquals("qr", setup.qrCodeUri);
         assertEquals(List.of("backup"), setup.backupCodes);
+    }
+
+    @Test
+    void adminUserResponseCanBeBuiltFromUser() {
+        UUID id = UUID.randomUUID();
+        User user = new User();
+        ReflectionTestUtils.setField(user, "id", id);
+        user.setEmail("admin@example.com");
+        user.setDisplayName("Admin");
+        user.setRolesList(List.of("ADMIN"));
+        user.setStatus(UserStatus.SUSPENDED);
+        user.setEmailVerified(true);
+
+        AdminUserResponseDTO dto = AdminUserResponseDTO.from(user);
+
+        assertEquals(id, dto.id);
+        assertEquals("admin@example.com", dto.email);
+        assertEquals("Admin", dto.displayName);
+        assertEquals(List.of("ADMIN"), dto.roles);
+        assertEquals("SUSPENDED", dto.status);
+        assertTrue(dto.suspended);
+        assertFalse(dto.enabled);
+        assertTrue(dto.emailVerified);
+
+        user.setStatus(UserStatus.ACTIVE);
+        AdminUserResponseDTO active = AdminUserResponseDTO.from(user);
+        assertFalse(active.suspended);
+        assertTrue(active.enabled);
     }
 }

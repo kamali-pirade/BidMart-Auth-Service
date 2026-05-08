@@ -8,7 +8,7 @@ class BackendApplicationTests {
 
     @Test
     void contextLoads() {
-        BackendApplication.main(new String[]{});
+        BackendApplication.main(new String[]{"--server.port=0"});
     }
 
     @Test

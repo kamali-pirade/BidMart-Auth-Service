@@ -62,6 +62,9 @@ class AuthServiceTest {
                 authProps, appProps, emailService
         );
 
+        lenient().when(refreshTokens.findByUserAndRevokedFalseAndExpiresAtAfterOrderByCreatedAtAsc(any(User.class), any(Instant.class)))
+                .thenReturn(java.util.List.of());
+
         user = new User();
         user.setEmail("test@example.com");
         user.setPasswordHash(encoder.encode("password123"));

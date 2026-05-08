@@ -115,6 +115,8 @@ class AuthServiceAdditionalTest {
         doAnswer(invocation -> invocation.getArgument(0)).when(refreshTokens).save(any(RefreshToken.class));
         doAnswer(invocation -> invocation.getArgument(0)).when(roles).save(any(Role.class));
         doAnswer(invocation -> invocation.getArgument(0)).when(partialAuthSessions).save(any(PartialAuthSession.class));
+        when(refreshTokens.findByUserAndRevokedFalseAndExpiresAtAfterOrderByCreatedAtAsc(any(User.class), any(Instant.class)))
+                .thenReturn(List.of());
     }
 
     @Test
@@ -320,6 +322,24 @@ class AuthServiceAdditionalTest {
         assertEquals("MANAGER", authService.adminUpdateRole(roleId, roleReq).name);
         when(roles.findById(UUID.nameUUIDFromBytes("role".getBytes()))).thenReturn(Optional.empty());
         assertThrows(IllegalArgumentException.class, () -> authService.adminUpdateRole(UUID.nameUUIDFromBytes("role".getBytes()), roleReq));
+    }
+
+    @Test
+    void loginRevokesOldestSessionsWhenConcurrentSessionLimitWouldBeExceeded() {
+        User user = user("limit@example.com", "secret", true);
+        RefreshToken oldest = refreshToken(user, UUID.randomUUID());
+        RefreshToken middle = refreshToken(user, UUID.randomUUID());
+        RefreshToken newest = refreshToken(user, UUID.randomUUID());
+        when(users.findByEmail("limit@example.com")).thenReturn(Optional.of(user));
+        when(refreshTokens.findByUserAndRevokedFalseAndExpiresAtAfterOrderByCreatedAtAsc(eq(user), any(Instant.class)))
+                .thenReturn(new java.util.ArrayList<>(List.of(oldest, middle, newest)));
+
+        authService.loginWithDesign(login("limit@example.com", "secret"), null);
+
+        assertTrue(oldest.isRevoked());
+        assertFalse(middle.isRevoked());
+        assertFalse(newest.isRevoked());
+        verify(refreshTokens).save(oldest);
     }
 
     @Test

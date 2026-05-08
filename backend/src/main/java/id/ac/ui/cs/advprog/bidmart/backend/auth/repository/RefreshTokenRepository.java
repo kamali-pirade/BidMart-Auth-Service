@@ -6,6 +6,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -14,6 +15,13 @@ public interface RefreshTokenRepository extends JpaRepository<RefreshToken, UUID
     Optional<RefreshToken> findByToken(String token);
 
     List<RefreshToken> findByUserAndRevokedFalseOrderByCreatedAtDesc(User user);
+
+    List<RefreshToken> findByUserAndRevokedFalseAndExpiresAtAfterOrderByCreatedAtAsc(
+            User user,
+            Instant now
+    );
+
+    List<RefreshToken> findByUserOrderByCreatedAtDesc(User user);
 
     Optional<RefreshToken> findByIdAndUser(UUID id, User user);
 

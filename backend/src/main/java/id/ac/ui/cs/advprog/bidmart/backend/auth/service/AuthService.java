@@ -75,6 +75,8 @@ public class AuthService {
     private final AuthProperties authProps;
     private final AppProperties appProps;
 
+    private static final int MAX_ACTIVE_SESSIONS_PER_USER = 3;
+
     @Autowired
     public AuthService(UserRepository users,
                        RefreshTokenRepository refreshTokens,
@@ -384,6 +386,13 @@ public class AuthService {
 
     @Transactional(readOnly = true)
     public List<UserResponseDTO> adminListUsers(String search, String role, String status, int page, int size) {
+        return adminListUserEntities(search, role, status, page, size).stream()
+                .map(this::toUserResponse)
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<User> adminListUserEntities(String search, String role, String status, int page, int size) {
         UserStatus filterStatus = null;
         if (status != null && !status.isBlank()) {
             filterStatus = UserStatus.valueOf(status.toUpperCase(Locale.ROOT));
@@ -397,7 +406,7 @@ public class AuthService {
 
         int from = Math.min(page * size, filtered.size());
         int to = Math.min(from + size, filtered.size());
-        return filtered.subList(from, to).stream().map(this::toUserResponse).toList();
+        return filtered.subList(from, to);
     }
 
     @Transactional(readOnly = true)
@@ -564,6 +573,8 @@ public class AuthService {
     }
 
     private LoginSuccessResponseDTO createLoginSuccess(User user, HttpServletRequest servletRequest) {
+        enforceConcurrentSessionLimit(user);
+
         RefreshToken session = new RefreshToken();
         session.setUser(user);
         session.setToken(generateRefreshToken());
@@ -574,7 +585,12 @@ public class AuthService {
         session.setLastActive(Instant.now());
         refreshTokens.save(session);
 
-        String accessToken = jwtService.generateAccessToken(user.getId(), user.getEmail(), session.getId(), user.getRolesList());
+        String accessToken = jwtService.generateAccessToken(
+                user.getId(),
+                user.getEmail(),
+                session.getId(),
+                user.getRolesList()
+        );
 
         return new LoginSuccessResponseDTO(
                 accessToken,
@@ -757,5 +773,21 @@ public class AuthService {
     public void deleteInternalUser(UUID userId) {
         User user = getUserById(userId);
         users.delete(user);
+    }
+
+    private void enforceConcurrentSessionLimit(User user) {
+        List<RefreshToken> activeTokens =
+                refreshTokens.findByUserAndRevokedFalseAndExpiresAtAfterOrderByCreatedAtAsc(
+                        user,
+                        Instant.now()
+                );
+
+        int allowedExistingSessions = MAX_ACTIVE_SESSIONS_PER_USER - 1;
+
+        while (activeTokens.size() > allowedExistingSessions) {
+            RefreshToken oldestToken = activeTokens.remove(0);
+            oldestToken.setRevoked(true);
+            refreshTokens.save(oldestToken);
+        }
     }
 }
