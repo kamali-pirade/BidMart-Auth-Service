@@ -21,9 +21,10 @@ import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
+import java.util.UUID;
 
 @RestController
-@RequestMapping("/auth")
+@RequestMapping({"/auth", "/api/auth"})
 public class AuthController {
 
     private final AuthService auth;
@@ -60,6 +61,12 @@ public class AuthController {
     public ResponseEntity<Map<String, String>> resetPassword(@RequestBody Map<String, String> req) {
         auth.resetPassword(req.get("token"), req.get("newPassword"));
         return ResponseEntity.ok(Map.of("message", "Kata sandi berhasil diperbarui."));
+    }
+
+    @GetMapping("/reset-password/validate")
+    public ResponseEntity<Map<String, Boolean>> validateResetPasswordToken(@RequestParam("token") String token) {
+        auth.validateResetToken(token);
+        return ResponseEntity.ok(Map.of("valid", true));
     }
 
     @PostMapping("/login")
@@ -105,12 +112,30 @@ public class AuthController {
         return ResponseEntity.ok(auth.refreshWithDesign(req.refreshToken));
     }
 
-    @PostMapping("/logout")
+    @RequestMapping(value = "/logout", method = {RequestMethod.POST, RequestMethod.DELETE})
     public ResponseEntity<Void> logout(@RequestBody(required = false) RefreshRequest req) {
         if (req != null && req.refreshToken != null && !req.refreshToken.isBlank()) {
             auth.logout(req.refreshToken);
         }
         return ResponseEntity.ok().build();
+    }
+
+    @PostMapping("/validate")
+    public ResponseEntity<Map<String, Object>> validateToken(Authentication authentication) {
+        @SuppressWarnings("unchecked")
+        Map<String, Object> principal = (Map<String, Object>) authentication.getPrincipal();
+        UUID userId = (UUID) principal.get("userId");
+        Object sid = principal.get("sessionId");
+        UUID sessionId = sid == null || sid.toString().isBlank() ? null : UUID.fromString(sid.toString());
+        User user = auth.validateCurrentSession(userId, sessionId);
+
+        return ResponseEntity.ok(Map.of(
+                "valid", true,
+                "userId", user.getId(),
+                "email", user.getEmail(),
+                "roles", user.getRolesList(),
+                "status", user.getStatus().name()
+        ));
     }
 
     private User getCurrentUser(Authentication authentication) {

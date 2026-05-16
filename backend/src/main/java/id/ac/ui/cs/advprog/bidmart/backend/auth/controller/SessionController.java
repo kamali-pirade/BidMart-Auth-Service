@@ -30,11 +30,22 @@ public class SessionController {
         return ResponseEntity.ok(authService.getActiveSessions(user, currentSessionId));
     }
 
+    @GetMapping("/api/auth/sessions")
+    public ResponseEntity<List<SessionResponseDTO>> listAuthSessions(Authentication authentication) {
+        return listSessions(authentication);
+    }
+
     @DeleteMapping("/users/me/sessions/{sessionId}")
     public ResponseEntity<Void> revokeSession(@PathVariable("sessionId") UUID sessionId, Authentication authentication) {
         User user = currentUser(authentication);
         authService.revokeSession(user, sessionId);
         return ResponseEntity.noContent().build();
+    }
+
+    @DeleteMapping("/api/auth/sessions/{sessionId}")
+    public ResponseEntity<Void> revokeAuthSession(@PathVariable("sessionId") UUID sessionId,
+                                                  Authentication authentication) {
+        return revokeSession(sessionId, authentication);
     }
 
     // Backward-compatible endpoint method used by existing tests.

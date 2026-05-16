@@ -19,12 +19,14 @@ import java.util.List;
 public class SecurityConfig {
 
     private final JwtAuthFilter jwtAuthFilter;
+    private final ServiceTokenFilter serviceTokenFilter;
 
     @Value("${app.frontend.url}")
     private String frontendUrl;
 
-    public SecurityConfig(JwtAuthFilter jwtAuthFilter) {
+    public SecurityConfig(JwtAuthFilter jwtAuthFilter, ServiceTokenFilter serviceTokenFilter) {
         this.jwtAuthFilter = jwtAuthFilter;
+        this.serviceTokenFilter = serviceTokenFilter;
     }
 
     @Bean
@@ -40,16 +42,29 @@ public class SecurityConfig {
 
                 .requestMatchers(HttpMethod.POST,
                         "/auth/register",
+                        "/api/auth/register",
                         "/auth/login",
+                        "/api/auth/login",
                         "/auth/refresh",
+                        "/api/auth/refresh",
                         "/auth/refresh-v2",
+                        "/api/auth/refresh-v2",
                         "/auth/verify-email",
+                        "/api/auth/verify-email",
                         "/auth/2fa/verify",
+                        "/api/auth/2fa/verify",
                         "/auth/forgot-password",
-                        "/auth/reset-password"
+                        "/api/auth/forgot-password",
+                        "/auth/reset-password",
+                        "/api/auth/reset-password"
                 ).permitAll()
 
-                .requestMatchers(HttpMethod.GET, "/auth/verify").permitAll()
+                .requestMatchers(HttpMethod.GET,
+                        "/auth/verify",
+                        "/api/auth/verify",
+                        "/auth/reset-password/validate",
+                        "/api/auth/reset-password/validate"
+                ).permitAll()
                 .requestMatchers("/health").permitAll()
 
                 .requestMatchers("/internal/users/**").permitAll()
@@ -58,10 +73,14 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.PUT, "/me").authenticated()
                 .requestMatchers("/users/me/**").authenticated()
                 .requestMatchers("/auth/2fa/**").authenticated()
+                .requestMatchers("/api/auth/2fa/**").authenticated()
+                .requestMatchers("/api/auth/**").authenticated()
                 .requestMatchers("/admin/**").hasRole("ADMIN")
+                .requestMatchers("/api/admin/**").hasRole("ADMIN")
 
                 .anyRequest().authenticated()
         )
+                .addFilterBefore(serviceTokenFilter, UsernamePasswordAuthenticationFilter.class)
                 .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();

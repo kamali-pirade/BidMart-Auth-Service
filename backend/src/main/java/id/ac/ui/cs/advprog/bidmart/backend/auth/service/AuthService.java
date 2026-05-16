@@ -35,6 +35,8 @@ import id.ac.ui.cs.advprog.bidmart.backend.auth.repository.UserRepository;
 import id.ac.ui.cs.advprog.bidmart.backend.auth.security.JwtService;
 import id.ac.ui.cs.advprog.bidmart.backend.auth.config.AppProperties;
 import id.ac.ui.cs.advprog.bidmart.backend.auth.config.AuthProperties;
+import id.ac.ui.cs.advprog.bidmart.backend.auth.config.SessionLimitProperties;
+import id.ac.ui.cs.advprog.bidmart.backend.auth.event.UserDomainEventPublisher;
 
 import id.ac.ui.cs.advprog.bidmart.common.event.UserRoleChangedEvent;
 import id.ac.ui.cs.advprog.bidmart.common.event.UserSuspendedEvent;
@@ -69,13 +71,13 @@ public class AuthService {
     private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
     private final TotpService totpService;
     private final ApplicationEventPublisher eventPublisher;
+    private final UserDomainEventPublisher userDomainEventPublisher;
 
     private final JwtService jwtService;
     private final EmailService emailService;
     private final AuthProperties authProps;
     private final AppProperties appProps;
-
-    private static final int MAX_ACTIVE_SESSIONS_PER_USER = 3;
+    private final SessionLimitProperties sessionLimitProperties;
 
     @Autowired
     public AuthService(UserRepository users,
@@ -88,7 +90,9 @@ public class AuthService {
                        AppProperties appProps,
                        EmailService emailService,
                        TotpService totpService,
-                       ApplicationEventPublisher eventPublisher) {
+                       ApplicationEventPublisher eventPublisher,
+                       UserDomainEventPublisher userDomainEventPublisher,
+                       SessionLimitProperties sessionLimitProperties) {
         this.users = users;
         this.refreshTokens = refreshTokens;
         this.roles = roles;
@@ -101,6 +105,34 @@ public class AuthService {
         this.emailService = emailService;
         this.totpService = totpService;
         this.eventPublisher = eventPublisher;
+        this.userDomainEventPublisher = userDomainEventPublisher;
+        this.sessionLimitProperties = sessionLimitProperties != null ? sessionLimitProperties : new SessionLimitProperties();
+    }
+
+    public AuthService(UserRepository users,
+                       RefreshTokenRepository refreshTokens,
+                       RoleRepository roles,
+                       EmailVerificationTokenRepository verificationTokens,
+                       PasswordResetTokenRepository resetTokens,
+                       PartialAuthSessionRepository partialAuthSessions,
+                       AuthProperties authProps,
+                       AppProperties appProps,
+                       EmailService emailService,
+                       TotpService totpService,
+                       ApplicationEventPublisher eventPublisher) {
+        this(users,
+                refreshTokens,
+                roles,
+                verificationTokens,
+                resetTokens,
+                partialAuthSessions,
+                authProps,
+                appProps,
+                emailService,
+                totpService,
+                eventPublisher,
+                UserDomainEventPublisher.noop(),
+                new SessionLimitProperties());
     }
 
     // Backward-compatible constructor for older tests.
@@ -131,7 +163,9 @@ public class AuthService {
                     public void publishEvent(ApplicationEvent event) {
                         // no-op for legacy tests
                     }
-                });
+                },
+                UserDomainEventPublisher.noop(),
+                new SessionLimitProperties());
     }
 
     @Transactional
@@ -253,6 +287,11 @@ public class AuthService {
         if (rt.getExpiresAt().isBefore(Instant.now())) throw new IllegalArgumentException("Refresh token expired");
 
         User u = rt.getUser();
+        if (u.getStatus() == UserStatus.SUSPENDED) {
+            rt.setRevoked(true);
+            refreshTokens.save(rt);
+            throw new IllegalStateException("Account suspended");
+        }
         rt.setLastActive(Instant.now());
         refreshTokens.save(rt);
 
@@ -422,7 +461,9 @@ public class AuthService {
         users.save(user);
 
         if (newStatus == UserStatus.SUSPENDED) {
-            eventPublisher.publishEvent(new UserSuspendedEvent(user.getId(), reason, Instant.now()));
+            UserSuspendedEvent event = new UserSuspendedEvent(user.getId(), reason, Instant.now());
+            eventPublisher.publishEvent(event);
+            userDomainEventPublisher.publishUserSuspended(event);
             refreshTokens.revokeAllByUser(user);
         }
 
@@ -434,7 +475,9 @@ public class AuthService {
         User user = getUserById(userId);
         user.setRolesList(roles);
         users.save(user);
-        eventPublisher.publishEvent(new UserRoleChangedEvent(user.getId(), user.getRolesList(), Instant.now()));
+        UserRoleChangedEvent event = new UserRoleChangedEvent(user.getId(), user.getRolesList(), Instant.now());
+        eventPublisher.publishEvent(event);
+        userDomainEventPublisher.publishUserRoleChanged(event);
         return toUserResponse(user);
     }
 
@@ -747,7 +790,9 @@ public class AuthService {
 
         if (status == UserStatus.SUSPENDED) {
             refreshTokens.revokeAllByUser(user);
-            eventPublisher.publishEvent(new UserSuspendedEvent(user.getId(), "Internal service update", Instant.now()));
+            UserSuspendedEvent event = new UserSuspendedEvent(user.getId(), "Internal service update", Instant.now());
+            eventPublisher.publishEvent(event);
+            userDomainEventPublisher.publishUserSuspended(event);
         }
 
         return users.save(user);
@@ -764,7 +809,9 @@ public class AuthService {
         user.setRolesList(req.roles);
         users.save(user);
 
-        eventPublisher.publishEvent(new UserRoleChangedEvent(user.getId(), user.getRolesList(), Instant.now()));
+        UserRoleChangedEvent event = new UserRoleChangedEvent(user.getId(), user.getRolesList(), Instant.now());
+        eventPublisher.publishEvent(event);
+        userDomainEventPublisher.publishUserRoleChanged(event);
 
         return user;
     }
@@ -782,12 +829,35 @@ public class AuthService {
                         Instant.now()
                 );
 
-        int allowedExistingSessions = MAX_ACTIVE_SESSIONS_PER_USER - 1;
+        int maxSessions = Math.max(1, sessionLimitProperties.getMaxConcurrentSessions());
+        int allowedExistingSessions = maxSessions - 1;
+
+        if (activeTokens.size() > allowedExistingSessions
+                && sessionLimitProperties.getSessionLimitPolicy()
+                == SessionLimitProperties.SessionLimitPolicy.REJECT_NEW_LOGIN) {
+            throw new IllegalStateException("Concurrent session limit reached");
+        }
 
         while (activeTokens.size() > allowedExistingSessions) {
             RefreshToken oldestToken = activeTokens.remove(0);
             oldestToken.setRevoked(true);
             refreshTokens.save(oldestToken);
         }
+    }
+
+    @Transactional(readOnly = true)
+    public User validateCurrentSession(UUID userId, UUID sessionId) {
+        User user = getUserById(userId);
+        if (user.getStatus() == UserStatus.SUSPENDED) {
+            throw new IllegalStateException("Account suspended");
+        }
+        if (sessionId != null) {
+            RefreshToken session = refreshTokens.findByIdAndUser(sessionId, user)
+                    .orElseThrow(() -> new IllegalArgumentException("Session not found"));
+            if (session.isRevoked() || session.getExpiresAt().isBefore(Instant.now())) {
+                throw new IllegalStateException("Session is not active");
+            }
+        }
+        return user;
     }
 }

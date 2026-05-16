@@ -2,6 +2,8 @@ package id.ac.ui.cs.advprog.bidmart.backend;
 
 import id.ac.ui.cs.advprog.bidmart.backend.auth.config.AppProperties;
 import id.ac.ui.cs.advprog.bidmart.backend.auth.config.AuthProperties;
+import id.ac.ui.cs.advprog.bidmart.backend.auth.config.KafkaTopicProperties;
+import id.ac.ui.cs.advprog.bidmart.backend.auth.config.SessionLimitProperties;
 import io.github.cdimascio.dotenv.Dotenv;
 import java.util.HashMap;
 import java.util.Map;
@@ -12,7 +14,12 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
 import org.springframework.scheduling.annotation.EnableAsync;
 
-@EnableConfigurationProperties({AuthProperties.class, AppProperties.class})
+@EnableConfigurationProperties({
+        AuthProperties.class,
+        AppProperties.class,
+        KafkaTopicProperties.class,
+        SessionLimitProperties.class
+})
 @SpringBootApplication(scanBasePackages = "id.ac.ui.cs.advprog.bidmart")
 @EnableJpaRepositories(basePackages = "id.ac.ui.cs.advprog.bidmart")
 @EntityScan(basePackages = "id.ac.ui.cs.advprog.bidmart")
