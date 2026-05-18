@@ -2,6 +2,7 @@ package id.ac.ui.cs.advprog.bidmart.backend.auth.service;
 
 import id.ac.ui.cs.advprog.bidmart.backend.auth.config.AppProperties;
 import id.ac.ui.cs.advprog.bidmart.backend.auth.config.AuthProperties;
+import id.ac.ui.cs.advprog.bidmart.backend.auth.config.SessionLimitProperties;
 import id.ac.ui.cs.advprog.bidmart.backend.auth.dto.ChangePasswordRequestDTO;
 import id.ac.ui.cs.advprog.bidmart.backend.auth.dto.InternalCreateUserRequestDTO;
 import id.ac.ui.cs.advprog.bidmart.backend.auth.dto.InternalUpdateUserRequestDTO;
@@ -19,6 +20,7 @@ import id.ac.ui.cs.advprog.bidmart.backend.auth.entity.RefreshToken;
 import id.ac.ui.cs.advprog.bidmart.backend.auth.entity.Role;
 import id.ac.ui.cs.advprog.bidmart.backend.auth.entity.User;
 import id.ac.ui.cs.advprog.bidmart.backend.auth.entity.UserStatus;
+import id.ac.ui.cs.advprog.bidmart.backend.auth.event.UserDomainEventPublisher;
 import id.ac.ui.cs.advprog.bidmart.backend.auth.repository.EmailVerificationTokenRepository;
 import id.ac.ui.cs.advprog.bidmart.backend.auth.repository.PartialAuthSessionRepository;
 import id.ac.ui.cs.advprog.bidmart.backend.auth.repository.PasswordResetTokenRepository;
@@ -81,9 +83,12 @@ class AuthServiceAdditionalTest {
     private TotpService totpService;
     @Mock
     private ApplicationEventPublisher eventPublisher;
+    @Mock
+    private UserDomainEventPublisher userDomainEventPublisher;
 
     private AuthService authService;
     private BCryptPasswordEncoder encoder;
+    private SessionLimitProperties sessionLimitProperties;
 
     @BeforeEach
     void setUp() {
@@ -95,6 +100,7 @@ class AuthServiceAdditionalTest {
         AppProperties appProps = new AppProperties();
         appProps.setBaseUrl("http://localhost:8080");
         appProps.setFrontendUrl("   ");
+        sessionLimitProperties = new SessionLimitProperties();
 
         authService = new AuthService(
                 users,
@@ -107,7 +113,9 @@ class AuthServiceAdditionalTest {
                 appProps,
                 emailService,
                 totpService,
-                eventPublisher
+                eventPublisher,
+                userDomainEventPublisher,
+                sessionLimitProperties
         );
         encoder = new BCryptPasswordEncoder();
 
@@ -303,8 +311,10 @@ class AuthServiceAdditionalTest {
 
         authService.adminUpdateUserStatus(user.getId(), "suspended", "reason");
         verify(refreshTokens).revokeAllByUser(user);
+        verify(userDomainEventPublisher).publishUserSuspended(any());
         authService.adminUpdateUserStatus(user.getId(), "active", "reason");
         assertEquals(List.of("ADMIN"), authService.adminUpdateUserRoles(user.getId(), List.of("ADMIN")).roles);
+        verify(userDomainEventPublisher).publishUserRoleChanged(any());
 
         var roleReq = new RoleRequestDTO();
         roleReq.name = " manager ";
@@ -340,6 +350,40 @@ class AuthServiceAdditionalTest {
         assertFalse(middle.isRevoked());
         assertFalse(newest.isRevoked());
         verify(refreshTokens).save(oldest);
+    }
+
+    @Test
+    void loginRejectsNewSessionWhenPolicyIsRejectNewLogin() {
+        sessionLimitProperties.setSessionLimitPolicy(SessionLimitProperties.SessionLimitPolicy.REJECT_NEW_LOGIN);
+        User user = user("reject@example.com", "secret", true);
+        when(users.findByEmail("reject@example.com")).thenReturn(Optional.of(user));
+        when(refreshTokens.findByUserAndRevokedFalseAndExpiresAtAfterOrderByCreatedAtAsc(eq(user), any(Instant.class)))
+                .thenReturn(List.of(
+                        refreshToken(user, UUID.randomUUID()),
+                        refreshToken(user, UUID.randomUUID()),
+                        refreshToken(user, UUID.randomUUID())
+                ));
+
+        assertThrows(IllegalStateException.class, () -> authService.loginWithDesign(login("reject@example.com", "secret"), null));
+    }
+
+    @Test
+    void validateCurrentSessionRejectsSuspendedOrRevokedSessions() {
+        User active = user("active-session@example.com", "secret", true);
+        UUID activeSessionId = UUID.randomUUID();
+        RefreshToken activeSession = refreshToken(active, activeSessionId);
+        when(users.findById(active.getId())).thenReturn(Optional.of(active));
+        when(refreshTokens.findByIdAndUser(activeSessionId, active)).thenReturn(Optional.of(activeSession));
+
+        assertEquals(active, authService.validateCurrentSession(active.getId(), activeSessionId));
+
+        activeSession.setRevoked(true);
+        assertThrows(IllegalStateException.class, () -> authService.validateCurrentSession(active.getId(), activeSessionId));
+
+        User suspended = user("suspended-session@example.com", "secret", true);
+        suspended.setStatus(UserStatus.SUSPENDED);
+        when(users.findById(suspended.getId())).thenReturn(Optional.of(suspended));
+        assertThrows(IllegalStateException.class, () -> authService.validateCurrentSession(suspended.getId(), null));
     }
 
     @Test
@@ -426,6 +470,7 @@ class AuthServiceAdditionalTest {
         InternalUpdateUserStatusRequestDTO suspended = new InternalUpdateUserStatusRequestDTO();
         suspended.status = "suspended";
         assertEquals(UserStatus.SUSPENDED, authService.updateInternalUserStatus(user.getId(), suspended).getStatus());
+        verify(userDomainEventPublisher, org.mockito.Mockito.atLeastOnce()).publishUserSuspended(any());
 
         InternalUpdateUserStatusRequestDTO active = new InternalUpdateUserStatusRequestDTO();
         active.status = "active";
@@ -441,6 +486,7 @@ class AuthServiceAdditionalTest {
         InternalUpdateUserRolesRequestDTO roleUpdate = new InternalUpdateUserRolesRequestDTO();
         roleUpdate.roles = List.of("ADMIN", "BUYER");
         assertEquals(List.of("ADMIN", "BUYER"), authService.updateInternalUserRoles(user.getId(), roleUpdate).getRolesList());
+        verify(userDomainEventPublisher, org.mockito.Mockito.atLeastOnce()).publishUserRoleChanged(any());
 
         authService.deleteInternalUser(user.getId());
         verify(users).delete(user);
