@@ -27,6 +27,10 @@ public class JwtService {
     }
 
     public String generateAccessToken(UUID userId, String email, UUID sessionId, List<String> roles) {
+        return generateAccessToken(userId, email, sessionId, roles, List.of());
+    }
+
+    public String generateAccessToken(UUID userId, String email, UUID sessionId, List<String> roles, List<String> permissions) {
         Instant now = Instant.now();
         Instant exp = now.plusMillis(props.getAccessTokenExpiration());
 
@@ -34,6 +38,7 @@ public class JwtService {
                 .subject(String.valueOf(userId))
                 .claim("email", email)
                 .claim("roles", roles)
+                .claim("permissions", permissions)
                 .issuedAt(Date.from(now))
                 .expiration(Date.from(exp));
 

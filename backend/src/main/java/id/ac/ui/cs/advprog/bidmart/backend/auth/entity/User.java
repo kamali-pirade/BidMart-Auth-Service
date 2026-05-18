@@ -44,6 +44,9 @@ public class User {
     @Column(name = "roles", nullable = false, length = 200, columnDefinition = "varchar(200) default 'BUYER,SELLER'")
     private String roles = "BUYER,SELLER";
 
+    @Column(name = "permissions", columnDefinition = "TEXT")
+    private String permissions;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 20, columnDefinition = "varchar(20) default 'ACTIVE'")
     private UserStatus status = UserStatus.ACTIVE;
@@ -87,6 +90,7 @@ public class User {
     public boolean isEmailVerified() { return emailVerified; }
 
     public String getRoles() { return roles; }
+
     public List<String> getRolesList() {
         if (roles == null || roles.isBlank()) {
             return List.of();
@@ -100,6 +104,31 @@ public class User {
     }
     public void setRolesList(List<String> roleNames) {
         this.roles = roleNames.stream()
+                .map(String::trim)
+                .filter(s -> !s.isBlank())
+                .map(s -> s.toUpperCase(Locale.ROOT))
+                .distinct()
+                .collect(Collectors.joining(","));
+    }
+
+    public String getPermissions() { return permissions; }
+    public List<String> getPermissionsList() {
+        if (permissions == null || permissions.isBlank()) {
+            return List.of();
+        }
+        return Arrays.stream(permissions.split(","))
+                .map(String::trim)
+                .filter(s -> !s.isBlank())
+                .map(s -> s.toUpperCase(Locale.ROOT))
+                .distinct()
+                .collect(Collectors.toList());
+    }
+    public void setPermissionsList(List<String> permissionNames) {
+        if (permissionNames == null) {
+            this.permissions = null;
+            return;
+        }
+        this.permissions = permissionNames.stream()
                 .map(String::trim)
                 .filter(s -> !s.isBlank())
                 .map(s -> s.toUpperCase(Locale.ROOT))

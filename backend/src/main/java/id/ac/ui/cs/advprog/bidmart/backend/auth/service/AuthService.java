@@ -51,11 +51,14 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.security.SecureRandom;
 import java.time.Instant;
+import java.util.Arrays;
 import java.util.Base64;
 import java.util.Comparator;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.UUID;
 
@@ -295,7 +298,13 @@ public class AuthService {
         rt.setLastActive(Instant.now());
         refreshTokens.save(rt);
 
-        String accessToken = jwtService.generateAccessToken(u.getId(), u.getEmail(), rt.getId(), u.getRolesList());
+        String accessToken = jwtService.generateAccessToken(
+                u.getId(),
+                u.getEmail(),
+                rt.getId(),
+                u.getRolesList(),
+                getEffectivePermissions(u)
+        );
         return new LoginSuccessResponseDTO(accessToken, refreshToken, authProps.getAccessTokenExpiration() / 1000, toUserResponse(u));
     }
 
@@ -475,9 +484,56 @@ public class AuthService {
         User user = getUserById(userId);
         user.setRolesList(roles);
         users.save(user);
-        UserRoleChangedEvent event = new UserRoleChangedEvent(user.getId(), user.getRolesList(), Instant.now());
-        eventPublisher.publishEvent(event);
-        userDomainEventPublisher.publishUserRoleChanged(event);
+        publishUserRoleChanged(user);
+        return toUserResponse(user);
+    }
+
+    @Transactional
+    public UserResponseDTO adminUpdateUserPermissions(UUID userId, List<String> permissions) {
+        User user = getUserById(userId);
+        user.setPermissionsList(normalizeValues(permissions));
+        users.save(user);
+        publishUserRoleChanged(user);
+        return toUserResponse(user);
+    }
+
+    @Transactional
+    public UserResponseDTO adminAssignRole(UUID userId, String roleName) {
+        User user = getUserById(userId);
+        List<String> updatedRoles = addValue(user.getRolesList(), roleName);
+        user.setRolesList(updatedRoles);
+        users.save(user);
+        publishUserRoleChanged(user);
+        return toUserResponse(user);
+    }
+
+    @Transactional
+    public UserResponseDTO adminRevokeRole(UUID userId, String roleName) {
+        User user = getUserById(userId);
+        List<String> updatedRoles = removeValue(user.getRolesList(), roleName);
+        user.setRolesList(updatedRoles);
+        users.save(user);
+        publishUserRoleChanged(user);
+        return toUserResponse(user);
+    }
+
+    @Transactional
+    public UserResponseDTO adminAssignPermission(UUID userId, String permission) {
+        User user = getUserById(userId);
+        List<String> updatedPermissions = addValue(user.getPermissionsList(), permission);
+        user.setPermissionsList(updatedPermissions);
+        users.save(user);
+        publishUserRoleChanged(user);
+        return toUserResponse(user);
+    }
+
+    @Transactional
+    public UserResponseDTO adminRevokePermission(UUID userId, String permission) {
+        User user = getUserById(userId);
+        List<String> updatedPermissions = removeValue(user.getPermissionsList(), permission);
+        user.setPermissionsList(updatedPermissions);
+        users.save(user);
+        publishUserRoleChanged(user);
         return toUserResponse(user);
     }
 
@@ -502,7 +558,7 @@ public class AuthService {
 
         Role role = new Role();
         role.setName(req.name.trim().toUpperCase(Locale.ROOT));
-        role.setPermissions(String.join(",", req.permissions));
+        role.setPermissions(String.join(",", normalizeValues(req.permissions)));
         roles.save(role);
         return toRoleResponse(role);
     }
@@ -514,7 +570,7 @@ public class AuthService {
         }
         Role role = roles.findById(roleId).orElseThrow(() -> new IllegalArgumentException("Role not found"));
         role.setName(req.name.trim().toUpperCase(Locale.ROOT));
-        role.setPermissions(String.join(",", req.permissions));
+        role.setPermissions(String.join(",", normalizeValues(req.permissions)));
         roles.save(role);
         return toRoleResponse(role);
     }
@@ -632,7 +688,8 @@ public class AuthService {
                 user.getId(),
                 user.getEmail(),
                 session.getId(),
-                user.getRolesList()
+                user.getRolesList(),
+                getEffectivePermissions(user)
         );
 
         return new LoginSuccessResponseDTO(
@@ -689,16 +746,42 @@ public class AuthService {
                 user.getDisplayName(),
                 user.isEmailVerified(),
                 user.getCreatedAt(),
-                user.getRolesList()
+                user.getRolesList(),
+                getEffectivePermissions(user)
         );
     }
 
     private RoleResponseDTO toRoleResponse(Role role) {
         List<String> permissions = List.of();
         if (role.getPermissions() != null && !role.getPermissions().isBlank()) {
-            permissions = List.of(role.getPermissions().split(","));
+            permissions = normalizeValues(List.of(role.getPermissions().split(",")));
         }
         return new RoleResponseDTO(role.getId(), role.getName(), permissions);
+    }
+
+    @Transactional(readOnly = true)
+    public List<String> getEffectivePermissions(User user) {
+        Set<String> effective = new LinkedHashSet<>(normalizeValues(user.getPermissionsList()));
+        if (roles != null) {
+            for (String roleName : user.getRolesList()) {
+                roles.findByNameIgnoreCase(roleName)
+                        .map(Role::getPermissions)
+                        .filter(raw -> !raw.isBlank())
+                        .map(raw -> normalizeValues(Arrays.asList(raw.split(","))))
+                        .ifPresent(effective::addAll);
+            }
+        }
+        return List.copyOf(effective);
+    }
+
+    @Transactional(readOnly = true)
+    public boolean userHasPermission(UUID userId, String permission) {
+        User user = getUserById(userId);
+        if (user.getStatus() == UserStatus.SUSPENDED) {
+            return false;
+        }
+        String normalized = normalizeValue(permission);
+        return getEffectivePermissions(user).contains(normalized);
     }
 
     @Transactional(readOnly = true)
@@ -741,6 +824,10 @@ public class AuthService {
             user.setRolesList(req.roles);
         } else {
             user.setRolesList(List.of("BUYER", "SELLER"));
+        }
+
+        if (req.permissions != null) {
+            user.setPermissionsList(req.permissions);
         }
 
         if (req.status != null && !req.status.isBlank()) {
@@ -807,13 +894,47 @@ public class AuthService {
         }
 
         user.setRolesList(req.roles);
+        if (req.permissions != null) {
+            user.setPermissionsList(req.permissions);
+        }
         users.save(user);
 
+        publishUserRoleChanged(user);
+
+        return user;
+    }
+
+    private void publishUserRoleChanged(User user) {
         UserRoleChangedEvent event = new UserRoleChangedEvent(user.getId(), user.getRolesList(), Instant.now());
         eventPublisher.publishEvent(event);
         userDomainEventPublisher.publishUserRoleChanged(event);
+    }
 
-        return user;
+    private static List<String> addValue(List<String> existing, String value) {
+        Set<String> values = new LinkedHashSet<>(normalizeValues(existing));
+        values.add(normalizeValue(value));
+        return List.copyOf(values);
+    }
+
+    private static List<String> removeValue(List<String> existing, String value) {
+        Set<String> values = new LinkedHashSet<>(normalizeValues(existing));
+        values.remove(normalizeValue(value));
+        return List.copyOf(values);
+    }
+
+    private static List<String> normalizeValues(List<String> values) {
+        if (values == null) {
+            return List.of();
+        }
+        return values.stream()
+                .map(AuthService::normalizeValue)
+                .filter(s -> !s.isBlank())
+                .distinct()
+                .toList();
+    }
+
+    private static String normalizeValue(String value) {
+        return value == null ? "" : value.trim().toUpperCase(Locale.ROOT);
     }
 
     @Transactional

@@ -89,19 +89,39 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                 }
             }
 
+            List<String> permissions = new ArrayList<>();
+            Object rawPermissions = claims.get("permissions");
+            if (rawPermissions instanceof List<?>) {
+                for (Object p : (List<?>) rawPermissions) {
+                    if (p != null) {
+                        permissions.add(p.toString());
+                    }
+                }
+            }
+
             Map<String, Object> principal = Map.of(
                     "userId", userId,
                     "email", email,
                     "sessionId", sessionId == null ? "" : sessionId,
-                    "roles", roles
+                    "roles", roles,
+                    "permissions", permissions
             );
 
-            List<SimpleGrantedAuthority> authorities = roles.stream()
+            List<SimpleGrantedAuthority> roleAuthorities = roles.stream()
                     .filter(Objects::nonNull)
                     .map(String::trim)
                     .filter(s -> !s.isBlank())
                     .map(r -> new SimpleGrantedAuthority("ROLE_" + r))
                     .toList();
+            List<SimpleGrantedAuthority> permissionAuthorities = permissions.stream()
+                    .filter(Objects::nonNull)
+                    .map(String::trim)
+                    .filter(s -> !s.isBlank())
+                    .map(p -> new SimpleGrantedAuthority("PERM_" + p))
+                    .toList();
+            List<SimpleGrantedAuthority> authorities = new ArrayList<>();
+            authorities.addAll(roleAuthorities);
+            authorities.addAll(permissionAuthorities);
 
             var auth = new UsernamePasswordAuthenticationToken(principal, null, authorities);
             auth.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));

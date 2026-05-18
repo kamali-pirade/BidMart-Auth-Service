@@ -11,6 +11,7 @@ public class AdminUserResponseDTO {
     public String email;
     public String displayName;
     public List<String> roles;
+    public List<String> permissions;
     public String status;
     public boolean suspended;
     public boolean enabled;
@@ -23,6 +24,7 @@ public class AdminUserResponseDTO {
         dto.email = user.getEmail();
         dto.displayName = user.getDisplayName();
         dto.roles = user.getRolesList();
+        dto.permissions = user.getPermissionsList();
         dto.status = user.getStatus().name();
         dto.suspended = user.getStatus() == UserStatus.SUSPENDED;
         dto.enabled = user.getStatus() == UserStatus.ACTIVE;

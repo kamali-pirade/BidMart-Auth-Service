@@ -1,14 +1,17 @@
 package id.ac.ui.cs.advprog.bidmart.backend.auth.controller;
 
 import id.ac.ui.cs.advprog.bidmart.backend.auth.dto.AdminUserResponseDTO;
+import id.ac.ui.cs.advprog.bidmart.backend.auth.dto.UpdateUserPermissionsRequestDTO;
 import id.ac.ui.cs.advprog.bidmart.backend.auth.dto.UpdateUserRolesRequestDTO;
 import id.ac.ui.cs.advprog.bidmart.backend.auth.dto.UpdateUserStatusRequestDTO;
 import id.ac.ui.cs.advprog.bidmart.backend.auth.service.AuthService;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -70,6 +73,44 @@ public class AdminUserController {
     public ResponseEntity<AdminUserResponseDTO> updateRoles(@PathVariable UUID userId,
                                                             @Valid @RequestBody UpdateUserRolesRequestDTO req) {
         authService.adminUpdateUserRoles(userId, req.roles);
+        if (req.permissions != null) {
+            authService.adminUpdateUserPermissions(userId, req.permissions);
+        }
+        return ResponseEntity.ok(AdminUserResponseDTO.from(authService.getUserById(userId)));
+    }
+
+    @PostMapping("/{userId}/roles/{roleName}")
+    public ResponseEntity<AdminUserResponseDTO> assignRole(@PathVariable UUID userId,
+                                                           @PathVariable String roleName) {
+        authService.adminAssignRole(userId, roleName);
+        return ResponseEntity.ok(AdminUserResponseDTO.from(authService.getUserById(userId)));
+    }
+
+    @DeleteMapping("/{userId}/roles/{roleName}")
+    public ResponseEntity<AdminUserResponseDTO> revokeRole(@PathVariable UUID userId,
+                                                           @PathVariable String roleName) {
+        authService.adminRevokeRole(userId, roleName);
+        return ResponseEntity.ok(AdminUserResponseDTO.from(authService.getUserById(userId)));
+    }
+
+    @PutMapping("/{userId}/permissions")
+    public ResponseEntity<AdminUserResponseDTO> updatePermissions(@PathVariable UUID userId,
+                                                                  @Valid @RequestBody UpdateUserPermissionsRequestDTO req) {
+        authService.adminUpdateUserPermissions(userId, req.permissions);
+        return ResponseEntity.ok(AdminUserResponseDTO.from(authService.getUserById(userId)));
+    }
+
+    @PostMapping("/{userId}/permissions/{permission}")
+    public ResponseEntity<AdminUserResponseDTO> assignPermission(@PathVariable UUID userId,
+                                                                 @PathVariable String permission) {
+        authService.adminAssignPermission(userId, permission);
+        return ResponseEntity.ok(AdminUserResponseDTO.from(authService.getUserById(userId)));
+    }
+
+    @DeleteMapping("/{userId}/permissions/{permission}")
+    public ResponseEntity<AdminUserResponseDTO> revokePermission(@PathVariable UUID userId,
+                                                                 @PathVariable String permission) {
+        authService.adminRevokePermission(userId, permission);
         return ResponseEntity.ok(AdminUserResponseDTO.from(authService.getUserById(userId)));
     }
 }

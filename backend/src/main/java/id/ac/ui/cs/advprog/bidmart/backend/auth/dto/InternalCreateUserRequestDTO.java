@@ -25,5 +25,7 @@ public class InternalCreateUserRequestDTO {
 
     public List<String> roles;
 
+    public List<String> permissions;
+
     public String status;
 }

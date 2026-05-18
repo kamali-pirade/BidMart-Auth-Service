@@ -84,6 +84,7 @@ public class MeController {
                 "displayName", user.getDisplayName() != null ? user.getDisplayName() : "Pengguna Baru",
                 "avatarUrl", user.getAvatarUrl() != null ? user.getAvatarUrl() : "",
                 "roles", user.getRolesList(),
+                "permissions", authService.getEffectivePermissions(user),
                 "emailVerified", user.isEmailVerified(),
                 "status", user.getStatus().name(),
                 "createdAt", user.getCreatedAt()

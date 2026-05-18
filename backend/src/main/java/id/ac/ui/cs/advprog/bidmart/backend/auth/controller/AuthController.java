@@ -121,21 +121,28 @@ public class AuthController {
     }
 
     @PostMapping("/validate")
-    public ResponseEntity<Map<String, Object>> validateToken(Authentication authentication) {
+    public ResponseEntity<Map<String, Object>> validateToken(Authentication authentication,
+                                                            @RequestParam(required = false) String permission) {
         @SuppressWarnings("unchecked")
         Map<String, Object> principal = (Map<String, Object>) authentication.getPrincipal();
         UUID userId = (UUID) principal.get("userId");
         Object sid = principal.get("sessionId");
         UUID sessionId = sid == null || sid.toString().isBlank() ? null : UUID.fromString(sid.toString());
         User user = auth.validateCurrentSession(userId, sessionId);
+        boolean permissionAllowed = permission == null
+                || permission.isBlank()
+                || auth.userHasPermission(user.getId(), permission);
 
-        return ResponseEntity.ok(Map.of(
+        Map<String, Object> body = Map.of(
                 "valid", true,
                 "userId", user.getId(),
                 "email", user.getEmail(),
                 "roles", user.getRolesList(),
+                "permissions", auth.getEffectivePermissions(user),
+                "permissionAllowed", permissionAllowed,
                 "status", user.getStatus().name()
-        ));
+        );
+        return ResponseEntity.status(permissionAllowed ? 200 : 403).body(body);
     }
 
     private User getCurrentUser(Authentication authentication) {

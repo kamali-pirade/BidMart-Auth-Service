@@ -7,4 +7,6 @@ import java.util.List;
 public class InternalUpdateUserRolesRequestDTO {
     @NotEmpty
     public List<String> roles;
+
+    public List<String> permissions;
 }

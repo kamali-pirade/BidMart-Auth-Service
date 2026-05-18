@@ -6,6 +6,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
@@ -13,9 +14,11 @@ import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
+import java.util.ArrayList;
 import java.util.List;
 
 @Configuration
+@EnableMethodSecurity
 public class SecurityConfig {
 
     private final JwtAuthFilter jwtAuthFilter;
@@ -75,8 +78,18 @@ public class SecurityConfig {
                 .requestMatchers("/auth/2fa/**").authenticated()
                 .requestMatchers("/api/auth/2fa/**").authenticated()
                 .requestMatchers("/api/auth/**").authenticated()
-                .requestMatchers("/admin/**").hasRole("ADMIN")
-                .requestMatchers("/api/admin/**").hasRole("ADMIN")
+                .requestMatchers("/admin/**").access((authentication, context) -> {
+                    var authorities = authentication.get().getAuthorities();
+                    boolean allowed = authorities.stream().anyMatch(a ->
+                            "ROLE_ADMIN".equals(a.getAuthority()) || a.getAuthority().startsWith("PERM_ADMIN_"));
+                    return new org.springframework.security.authorization.AuthorizationDecision(allowed);
+                })
+                .requestMatchers("/api/admin/**").access((authentication, context) -> {
+                    var authorities = authentication.get().getAuthorities();
+                    boolean allowed = authorities.stream().anyMatch(a ->
+                            "ROLE_ADMIN".equals(a.getAuthority()) || a.getAuthority().startsWith("PERM_ADMIN_"));
+                    return new org.springframework.security.authorization.AuthorizationDecision(allowed);
+                })
 
                 .anyRequest().authenticated()
         )
@@ -89,7 +102,14 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOrigins(List.of("http://localhost:3000", frontendUrl));
+        List<String> allowedOrigins = new ArrayList<>(List.of(
+                "http://localhost:3000",
+                "http://127.0.0.1:3000"
+        ));
+        if (frontendUrl != null && !frontendUrl.isBlank()) {
+            allowedOrigins.add(frontendUrl);
+        }
+        configuration.setAllowedOrigins(allowedOrigins.stream().distinct().toList());
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"));
         configuration.setAllowedHeaders(List.of("*"));
         configuration.setExposedHeaders(List.of("Authorization"));

@@ -11,13 +11,19 @@ public class UserResponseDTO {
     public boolean emailVerified;
     public Instant createdAt;
     public List<String> roles;
+    public List<String> permissions;
 
     public UserResponseDTO(UUID id, String email, String displayName, boolean emailVerified, Instant createdAt, List<String> roles) {
+        this(id, email, displayName, emailVerified, createdAt, roles, List.of());
+    }
+
+    public UserResponseDTO(UUID id, String email, String displayName, boolean emailVerified, Instant createdAt, List<String> roles, List<String> permissions) {
         this.id = id;
         this.email = email;
         this.displayName = displayName;
         this.emailVerified = emailVerified;
         this.createdAt = createdAt;
         this.roles = roles;
+        this.permissions = permissions;
     }
 }

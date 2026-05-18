@@ -93,6 +93,7 @@ public class InternalUserController {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("userId", user.getId());
         body.put("roles", safeRoles(user));
+        body.put("permissions", authService.getEffectivePermissions(user));
 
         return ResponseEntity.ok(body);
     }
@@ -104,7 +105,41 @@ public class InternalUserController {
 
         return ResponseEntity.ok(Map.of(
                 "userId", user.getId(),
-                "roles", safeRoles(user)
+                "roles", safeRoles(user),
+                "permissions", authService.getEffectivePermissions(user)
+        ));
+    }
+
+    @GetMapping("/{userId}/permissions")
+    public ResponseEntity<Map<String, Object>> getUserPermissions(@PathVariable UUID userId) {
+        User user = authService.getUserById(userId);
+        return ResponseEntity.ok(Map.of(
+                "userId", user.getId(),
+                "directPermissions", user.getPermissionsList(),
+                "effectivePermissions", authService.getEffectivePermissions(user)
+        ));
+    }
+
+    @GetMapping("/{userId}/permissions/{permission}/validate")
+    public ResponseEntity<Map<String, Object>> validateUserPermission(@PathVariable UUID userId,
+                                                                      @PathVariable String permission) {
+        boolean allowed = authService.userHasPermission(userId, permission);
+        return ResponseEntity.status(allowed ? 200 : 403).body(Map.of(
+                "valid", allowed,
+                "userId", userId,
+                "permission", permission
+        ));
+    }
+
+    @PostMapping("/{userId}/permissions/validate")
+    public ResponseEntity<Map<String, Object>> validateUserPermissionPost(@PathVariable UUID userId,
+                                                                          @RequestBody Map<String, String> req) {
+        String permission = req.get("permission");
+        boolean allowed = authService.userHasPermission(userId, permission);
+        return ResponseEntity.status(allowed ? 200 : 403).body(Map.of(
+                "valid", allowed,
+                "userId", userId,
+                "permission", permission
         ));
     }
 
@@ -145,6 +180,7 @@ public class InternalUserController {
                 user.getAvatarUrl() != null ? user.getAvatarUrl() : "",
                 user.isEmailVerified(),
                 safeRoles(user),
+                authService.getEffectivePermissions(user),
                 safeStatus(user),
                 user.getCreatedAt(),
                 user.getUpdatedAt()

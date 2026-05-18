@@ -12,6 +12,7 @@ public class InternalUserResponseDTO {
     public String avatarUrl;
     public boolean emailVerified;
     public List<String> roles;
+    public List<String> permissions;
     public String status;
     public Instant createdAt;
     public Instant updatedAt;
@@ -22,6 +23,7 @@ public class InternalUserResponseDTO {
                                    String avatarUrl,
                                    boolean emailVerified,
                                    List<String> roles,
+                                   List<String> permissions,
                                    String status,
                                    Instant createdAt,
                                    Instant updatedAt) {
@@ -31,6 +33,7 @@ public class InternalUserResponseDTO {
         this.avatarUrl = avatarUrl;
         this.emailVerified = emailVerified;
         this.roles = roles;
+        this.permissions = permissions;
         this.status = status;
         this.createdAt = createdAt;
         this.updatedAt = updatedAt;
