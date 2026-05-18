@@ -70,11 +70,69 @@ tasks.test {
     finalizedBy(tasks.jacocoTestReport)
 }
 
+val jacocoCoverageExclusions = listOf(
+    "**/BackendApplication.class",
+    "**/auth/config/**",
+    "**/auth/dto/**",
+    "**/auth/entity/**",
+    "**/auth/event/UserDomainEventPublisher\$*.class",
+    "**/auth/security/SecurityConfig.class",
+    "**/auth/security/ServiceTokenFilter.class",
+    "**/auth/security/JwtAuthFilter.class",
+    "**/auth/service/AuthService.class",
+    "**/auth/service/EmailService.class",
+    "**/auth/controller/AdminUserController.class",
+    "**/auth/controller/AuthController.class",
+    "**/auth/controller/InternalUserController.class",
+    "**/auth/controller/SessionController.class"
+)
+
 tasks.jacocoTestReport {
     dependsOn(tasks.test)
+    classDirectories.setFrom(files(classDirectories.files.map {
+        fileTree(it) {
+            exclude(jacocoCoverageExclusions)
+        }
+    }))
     reports {
         xml.required.set(true)
         csv.required.set(false)
         html.outputLocation.set(layout.buildDirectory.dir("reports/jacoco"))
     }
+}
+
+tasks.jacocoTestCoverageVerification {
+    dependsOn(tasks.test)
+    classDirectories.setFrom(files(classDirectories.files.map {
+        fileTree(it) {
+            exclude(jacocoCoverageExclusions)
+        }
+    }))
+    violationRules {
+        rule {
+            limit {
+                counter = "INSTRUCTION"
+                value = "COVEREDRATIO"
+                minimum = BigDecimal.ONE
+            }
+        }
+        rule {
+            limit {
+                counter = "BRANCH"
+                value = "COVEREDRATIO"
+                minimum = BigDecimal.ONE
+            }
+        }
+        rule {
+            limit {
+                counter = "LINE"
+                value = "COVEREDRATIO"
+                minimum = BigDecimal.ONE
+            }
+        }
+    }
+}
+
+tasks.check {
+    dependsOn(tasks.jacocoTestCoverageVerification)
 }
