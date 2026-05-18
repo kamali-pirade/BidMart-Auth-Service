@@ -1,0 +1,11 @@
+.gradle
+build
+bin
+.env
+.env.local
+.DS_Store
+.git
+.github/java-upgrade
+.idea
+.vscode
+*.iml

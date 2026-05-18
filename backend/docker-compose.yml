@@ -1,0 +1,10 @@
+services:
+  bidmart-auth-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ${DOCKER_IMAGE:-bidmart-auth-service:local}
+    env_file:
+      - .env
+    ports:
+      - "8081:8081"
