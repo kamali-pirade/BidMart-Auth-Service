@@ -441,14 +441,20 @@ public class AuthService {
 
     @Transactional(readOnly = true)
     public List<User> adminListUserEntities(String search, String role, String status, int page, int size) {
-        UserStatus filterStatus = null;
-        if (status != null && !status.isBlank()) {
-            filterStatus = UserStatus.valueOf(status.toUpperCase(Locale.ROOT));
-        }
+        String normalizedSearch = search == null ? "" : search.trim().toLowerCase(Locale.ROOT);
+        String normalizedRole = role == null ? "" : role.trim().toUpperCase(Locale.ROOT);
 
-        List<User> candidates = users.searchUsers(search, filterStatus);
-        List<User> filtered = candidates.stream()
-                .filter(u -> role == null || role.isBlank() || u.getRolesList().contains(role.toUpperCase(Locale.ROOT)))
+        final UserStatus filterStatus = status != null && !status.isBlank()
+                ? UserStatus.valueOf(status.toUpperCase(Locale.ROOT))
+                : null;
+
+        List<User> filtered = users.findAll().stream()
+                .filter(u -> normalizedSearch.isBlank()
+                        || u.getEmail().toLowerCase(Locale.ROOT).contains(normalizedSearch)
+                        || (u.getDisplayName() != null
+                        && u.getDisplayName().toLowerCase(Locale.ROOT).contains(normalizedSearch)))
+                .filter(u -> filterStatus == null || u.getStatus() == filterStatus)
+                .filter(u -> normalizedRole.isBlank() || u.getRolesList().contains(normalizedRole))
                 .sorted(Comparator.comparing(User::getCreatedAt).reversed())
                 .collect(Collectors.toList());
 

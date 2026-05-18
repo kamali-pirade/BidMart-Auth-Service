@@ -298,8 +298,7 @@ class AuthServiceAdditionalTest {
         User seller = user("seller@example.com", "secret", true);
         seller.setRolesList(List.of("SELLER"));
         ReflectionTestUtils.setField(seller, "createdAt", Instant.now());
-        when(users.searchUsers("e", UserStatus.ACTIVE)).thenReturn(List.of(buyer, seller));
-        when(users.searchUsers("e", null)).thenReturn(List.of(buyer, seller));
+        when(users.findAll()).thenReturn(List.of(buyer, seller));
         assertEquals(List.of("seller@example.com"), authService.adminListUsers("e", "seller", "active", 0, 1).stream().map(dto -> dto.email).toList());
         assertEquals(List.of(), authService.adminListUsers("e", "buyer", "active", 5, 10));
         assertEquals(2, authService.adminListUsers("e", null, null, 0, 10).size());
