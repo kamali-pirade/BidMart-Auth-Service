@@ -21,12 +21,6 @@ spring:
       write-dates-as-timestamps: false
     default-property-inclusion: non_null
 
-  kafka:
-    bootstrap-servers: ${SPRING_KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
-    producer:
-      key-serializer: org.apache.kafka.common.serialization.StringSerializer
-      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
-
 server:
   port: ${SERVER_PORT:8081}
 
@@ -43,11 +37,6 @@ jwt:
 auth:
   max-concurrent-sessions: ${AUTH_MAX_CONCURRENT_SESSIONS:3}
   session-limit-policy: ${AUTH_SESSION_LIMIT_POLICY:REVOKE_OLDEST_SESSION}
-
-kafka:
-  topic:
-    user-suspended: ${KAFKA_TOPIC_USER_SUSPENDED:user-suspended}
-    user-role-changed: ${KAFKA_TOPIC_USER_ROLE_CHANGED:user-role-changed}
 
 resend:
   api-key: ${RESEND_API_KEY:}
@@ -69,6 +58,3 @@ spring:
     hibernate:
       ddl-auto: create-drop
     database-platform: org.hibernate.dialect.H2Dialect
-
-  kafka:
-    bootstrap-servers: ${spring.embedded.kafka.brokers:localhost:9092}
