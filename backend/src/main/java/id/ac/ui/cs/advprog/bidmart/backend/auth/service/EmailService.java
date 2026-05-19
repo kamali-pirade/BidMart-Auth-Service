@@ -2,32 +2,35 @@ package id.ac.ui.cs.advprog.bidmart.backend.auth.service;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.mail.MailException;
+import org.springframework.mail.SimpleMailMessage;
+import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
-import org.springframework.web.client.RestClient;
-import org.springframework.web.client.RestClientException;
-
-import java.util.Map;
 
 @Service
 public class EmailService {
 
-    private static final Logger log = LoggerFactory.getLogger(EmailService.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(EmailService.class);
 
-    private final RestClient resendClient;
+    private final ObjectProvider<JavaMailSender> mailSenderProvider;
 
     @Value("${app.mail.enabled:true}")
     private boolean mailEnabled;
 
-    @Value("${resend.api-key:}")
-    private String resendApiKey;
+    @Value("${spring.mail.username:}")
+    private String smtpUsername;
 
-    @Value("${resend.from-email:}")
-    private String resendFromEmail;
+    @Value("${spring.mail.password:}")
+    private String smtpPassword;
 
-    public EmailService(RestClient.Builder restClientBuilder) {
-        this.resendClient = restClientBuilder.baseUrl("https://api.resend.com").build();
+    @Value("${app.mail.from-email:}")
+    private String mailFromEmail;
+
+    public EmailService(ObjectProvider<JavaMailSender> mailSenderProvider) {
+        this.mailSenderProvider = mailSenderProvider;
     }
 
     @Async
@@ -66,32 +69,38 @@ public class EmailService {
 
     private void sendEmail(String to, String subject, String text, String fallbackLabel, String fallbackValue) {
         if (!mailEnabled) {
-            log.warn("Email sending disabled. {} for {}: {}", fallbackLabel, to, fallbackValue);
+            LOGGER.warn("Email sending disabled. {} for {}: {}", fallbackLabel, to, fallbackValue);
             return;
         }
 
-        if (resendApiKey == null || resendApiKey.isBlank()
-                || resendFromEmail == null || resendFromEmail.isBlank()) {
-            log.warn("Resend is not configured. {} for {}: {}", fallbackLabel, to, fallbackValue);
-            return;
+        if (isSmtpConfigured()) {
+            try {
+                sendWithSmtp(to, subject, text);
+                LOGGER.info("Email sent to {} via SMTP", to);
+                return;
+            } catch (MailException e) {
+                LOGGER.error("Failed to send email to {} via SMTP: {}", to, e.getMessage());
+            }
+        } else {
+            LOGGER.warn("SMTP is not configured. Using fallback log for {}", to);
         }
 
-        try {
-            resendClient.post()
-                    .uri("/emails")
-                    .header("Authorization", "Bearer " + resendApiKey)
-                    .body(Map.of(
-                            "from", resendFromEmail,
-                            "to", new String[]{to},
-                            "subject", subject,
-                            "text", text
-                    ))
-                    .retrieve()
-                    .toBodilessEntity();
-            log.info("Email sent to {} via Resend", to);
-        } catch (RestClientException e) {
-            log.error("Failed to send email to {} via Resend: {}", to, e.getMessage());
-            log.info("Fallback {} for {}: {}", fallbackLabel, to, fallbackValue);
-        }
+        LOGGER.info("Fallback {} for {}: {}", fallbackLabel, to, fallbackValue);
+    }
+
+    private boolean isSmtpConfigured() {
+        return mailSenderProvider.getIfAvailable() != null
+                && smtpUsername != null && !smtpUsername.isBlank()
+                && smtpPassword != null && !smtpPassword.isBlank()
+                && mailFromEmail != null && !mailFromEmail.isBlank();
+    }
+
+    private void sendWithSmtp(String to, String subject, String text) {
+        SimpleMailMessage message = new SimpleMailMessage();
+        message.setFrom(mailFromEmail);
+        message.setTo(to);
+        message.setSubject(subject);
+        message.setText(text);
+        mailSenderProvider.getObject().send(message);
     }
 }
