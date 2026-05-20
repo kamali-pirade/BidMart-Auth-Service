@@ -15,11 +15,13 @@ class RegisterRequestDTOTest {
         dto.email = "newuser@example.com";
         dto.password = "SecurePass123";
         dto.displayName = "New User";
+        dto.role = "BUYER";
 
         assertNotNull(dto);
         assertEquals("newuser@example.com", dto.email);
         assertEquals("SecurePass123", dto.password);
         assertEquals("New User", dto.displayName);
+        assertEquals("BUYER", dto.role);
     }
 
     @Test
@@ -47,6 +49,15 @@ class RegisterRequestDTOTest {
         dto.displayName = "John Doe";
 
         assertEquals("John Doe", dto.displayName);
+    }
+
+    @Test
+    @DisplayName("Should set and get role")
+    void testSetAndGetRole() {
+        RegisterRequestDTO dto = new RegisterRequestDTO();
+        dto.role = "SELLER";
+
+        assertEquals("SELLER", dto.role);
     }
 
     @Test
@@ -89,10 +100,12 @@ class RegisterRequestDTOTest {
         dto.email = null;
         dto.password = null;
         dto.displayName = null;
+        dto.role = null;
 
         assertNull(dto.email);
         assertNull(dto.password);
         assertNull(dto.displayName);
+        assertNull(dto.role);
     }
 
     @Test
@@ -102,10 +115,12 @@ class RegisterRequestDTOTest {
         dto.email = "";
         dto.password = "";
         dto.displayName = "";
+        dto.role = "";
 
         assertEquals("", dto.email);
         assertEquals("", dto.password);
         assertEquals("", dto.displayName);
+        assertEquals("", dto.role);
     }
 
     @Test

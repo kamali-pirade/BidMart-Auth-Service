@@ -133,6 +133,7 @@ class AuthServiceAdditionalTest {
         req.email = "  New@Example.COM ";
         req.password = "password123";
         req.displayName = "New User";
+        req.role = "seller";
         when(users.findByEmail("new@example.com")).thenReturn(Optional.empty());
 
         var response = authService.registerAndReturn(req);
@@ -140,8 +141,31 @@ class AuthServiceAdditionalTest {
         assertEquals("new@example.com", response.email);
         ArgumentCaptor<User> userCaptor = ArgumentCaptor.forClass(User.class);
         verify(users).save(userCaptor.capture());
-        assertEquals(List.of("BUYER", "SELLER"), userCaptor.getValue().getRolesList());
-        verify(emailService).sendVerificationEmail(eq("new@example.com"), org.mockito.ArgumentMatchers.startsWith("http://localhost:3000/auth/verify?token="));
+        assertEquals(List.of("SELLER"), userCaptor.getValue().getRolesList());
+        verify(emailService).sendVerificationEmail(eq("new@example.com"), org.mockito.ArgumentMatchers.startsWith("http://localhost/auth/verify?token="));
+    }
+
+    @Test
+    void registerAndReturn_DefaultsToBuyerAndRejectsInvalidRole() {
+        RegisterRequestDTO buyer = new RegisterRequestDTO();
+        buyer.email = "buyer@example.com";
+        buyer.password = "password123";
+        buyer.displayName = "Buyer User";
+        when(users.findByEmail("buyer@example.com")).thenReturn(Optional.empty());
+
+        authService.registerAndReturn(buyer);
+
+        ArgumentCaptor<User> userCaptor = ArgumentCaptor.forClass(User.class);
+        verify(users).save(userCaptor.capture());
+        assertEquals(List.of("BUYER"), userCaptor.getValue().getRolesList());
+
+        RegisterRequestDTO invalid = new RegisterRequestDTO();
+        invalid.email = "invalid@example.com";
+        invalid.password = "password123";
+        invalid.displayName = "Invalid User";
+        invalid.role = "admin";
+
+        assertThrows(IllegalArgumentException.class, () -> authService.registerAndReturn(invalid));
     }
 
     @Test

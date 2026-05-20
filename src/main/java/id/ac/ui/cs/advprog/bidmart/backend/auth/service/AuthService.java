@@ -183,6 +183,7 @@ public class AuthService {
     @Transactional
     public UserResponseDTO registerAndReturn(RegisterRequestDTO request) {
         String normalized = request.email.toLowerCase().trim();
+        String requestedRole = resolveRegistrationRole(request.role);
 
         Optional<User> existingUser = users.findByEmail(normalized);
 
@@ -194,6 +195,7 @@ public class AuthService {
 
             u.setPasswordHash(passwordEncoder.encode(request.password));
             u.setDisplayName(request.displayName);
+            u.setRolesList(List.of(requestedRole));
             users.save(u);
 
             sendVerificationProcedure(u);
@@ -205,12 +207,24 @@ public class AuthService {
         u.setPasswordHash(passwordEncoder.encode(request.password));
         u.setDisplayName(request.displayName);
         u.setEmailVerified(false);
-        u.setRolesList(List.of("BUYER", "SELLER"));
+        u.setRolesList(List.of(requestedRole));
         u.setStatus(UserStatus.ACTIVE);
         users.save(u);
 
         sendVerificationProcedure(u);
         return toUserResponse(u);
+    }
+
+    private static String resolveRegistrationRole(String role) {
+        if (role == null || role.isBlank()) {
+            return "BUYER";
+        }
+
+        String normalized = role.trim().toUpperCase(Locale.ROOT);
+        if (!"BUYER".equals(normalized) && !"SELLER".equals(normalized)) {
+            throw new IllegalArgumentException("Role must be BUYER or SELLER");
+        }
+        return normalized;
     }
 
     private void sendVerificationProcedure(User u) {
@@ -607,7 +621,7 @@ public class AuthService {
     private String buildFrontendLink(String path, String token) {
         String frontend = appProps.getFrontendUrl();
         if (frontend == null || frontend.isBlank()) {
-            frontend = "http://localhost:3000";
+            frontend = "http://localhost";
         }
         return frontend + path + "?token=" + token;
     }

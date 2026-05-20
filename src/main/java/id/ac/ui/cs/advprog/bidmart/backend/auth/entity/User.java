@@ -41,8 +41,8 @@ public class User {
     @Column(name = "email_verified", nullable = false)
     private boolean emailVerified = false;
 
-    @Column(name = "roles", nullable = false, length = 200, columnDefinition = "varchar(200) default 'BUYER,SELLER'")
-    private String roles = "BUYER,SELLER";
+    @Column(name = "roles", nullable = false, length = 200, columnDefinition = "varchar(200) default 'BUYER'")
+    private String roles = "BUYER";
 
     @Column(name = "permissions", columnDefinition = "TEXT")
     private String permissions;
