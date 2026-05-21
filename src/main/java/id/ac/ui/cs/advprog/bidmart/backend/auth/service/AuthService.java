@@ -623,7 +623,11 @@ public class AuthService {
         if (frontend == null || frontend.isBlank()) {
             frontend = "http://localhost";
         }
-        return frontend + path + "?token=" + token;
+        frontend = frontend.trim()
+                .replaceFirst("^(https?://localhost):3000(?=/|$)", "$1")
+                .replaceAll("/+$", "");
+        String normalizedPath = path.startsWith("/") ? path : "/" + path;
+        return frontend + normalizedPath + "?token=" + token;
     }
 
     @Transactional
